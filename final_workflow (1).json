@@ -1,0 +1,402 @@
+{
+  "name": "final_workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $('Telegram Trigger1').item.json.message.document.file_id }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        848,
+        176
+      ],
+      "id": "d6d5c1ab-a21b-4606-9039-2ba612955e96",
+      "name": "Telegram: Get File",
+      "webhookId": "0b60a1de-a75c-4b2f-ae0f-aa63111441a7",
+      "credentials": {
+        "telegramApi": {
+          "id": "fjPmHJS8GsNzXIsD",
+          "name": "SendInvoiceShopee_bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const now = new Date();\n  const tanggal = now.toLocaleDateString('id-ID', {\n    timeZone: 'Asia/Jakarta',\n    day: '2-digit',\n    month: '2-digit',\n    year: 'numeric'\n  });\n  const waktu = now.toLocaleTimeString('id-ID', {\n    timeZone: 'Asia/Jakarta',\n    hour: '2-digit',\n    minute: '2-digit'\n  });\n  const hariList = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];\n  const hari = hariList[new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })).getDay()];\n  return { json: { ...item.json, tanggal, waktu, hari } };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1808,
+        176
+      ],
+      "id": "5da62055-0ade-4285-bee4-162c643d8e28",
+      "name": "Add Tanggal/Waktu/Hari"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger1').item.json.message.chat.id }}",
+        "text": "Data berhasil diekstrak dan disimpan ke Google Sheets.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2288,
+        176
+      ],
+      "id": "19467df3-303e-4d75-a5d6-05d6fe933bba",
+      "name": "Telegram: Send Confirmation",
+      "webhookId": "78512bac-d1ad-418a-870d-7ec90d327af7",
+      "credentials": {
+        "telegramApi": {
+          "id": "fjPmHJS8GsNzXIsD",
+          "name": "SendInvoiceShopee_bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        608,
+        176
+      ],
+      "id": "9bde8c86-f4fa-47ce-b36c-b80860ff310b",
+      "name": "Telegram Trigger1",
+      "webhookId": "a546816d-85c8-4801-8dc8-3348fa8d10b1",
+      "credentials": {
+        "telegramApi": {
+          "id": "fjPmHJS8GsNzXIsD",
+          "name": "SendInvoiceShopee_bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        1088,
+        176
+      ],
+      "id": "9f1048ba-943f-45eb-a2c0-fd2167327e76",
+      "name": "Extract from File1"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You extract fields from Indonesian logistics invoices/labels and return ONLY valid JSON:\n{ \"extracted_data\": [ { ... } ] }\n\nSchema per paket (Wajib persis):\n- \"No. Pesanan\": string atau null\n- \"No. Resi\": string atau null\n- \"Pengirim\": string atau null\n- \"Penerima\": string atau null\n- \"Nama Produk\": string atau null\n- \"Variasi\": string atau null\n- \"Qty\": number atau null\n\nAturan No. Resi:\n- Biasanya diawali prefix kurir (mis. SPXID, JX, JNE, JNT, SICEPAT, TIKI, POS, NINJA, LEX).\n- Jangan taruh nomor berprefix kurir ke \"No. Pesanan\".\n\nAturan No. Pesanan:\n- Ambil dari label \"No. Pesanan\"/\"Nomor Pesanan\"/\"Order ID\"/\"Order No\".\n- Jika label tidak ada, pilih kandidat alfanumerik 10–25 karakter atau numerik panjang (≥12) yang BUKAN nomor resi (bukan berprefix kurir).\n- Jika ragu, isi null (jangan menebak).\n\nAturan Penerima (ringkas):\n- Ambil nama orang/toko dekat label \"Penerima/Kepada\".\n- Jangan isi alamat wilayah (KAB/KOTA/KEC/RT/RW/JL/...); jika alamat, isi null.\n- Jika termasking (mis. \"u**6\"), gunakan itu.\n\nAturan Pengirim (WAJIB):\n1) Prioritaskan baris yang berlabel eksplisit: \"Pengirim\", \"Penjual\", \"Seller\", \"Toko\", \"Store\", \"Merchant\".\n   - Jika ada \"Pengirim: X\", gunakan X sebagai nilai \"Pengirim\".\n2) Jika label tidak ditemukan, gunakan nama penjual yang muncul di konteks penjualan:\n   - Header/tabel \"Product Name / Seller SKU / SKU\" sering menyertakan brand/penjual. \n   - Jika ada nama merek/penjual yang konsisten di judul produk (mis. brand di awal), gunakan itu.\n3) Tolak kandidat yang terlihat seperti alamat atau landmark:\n   - Mengandung token alamat: [\"KAB\", \"KOTA\", \"KEC\", \"KEL\", \"DESA\", \"RT\", \"RW\", \"JLN\", \"JL\", \"JALAN\", \"GANG\", \"PERUM\", \"BLOK\", \"NO\", \"KABUPATEN\", \"PROVINSI\"].\n   - Berada di blok setelah label \"Penerima/Kepada\", atau berada sebelum/diikuti daftar wilayah/kodepos/nomor telepon.\n   - Contoh landmark uppercase pada alamat (mis. \"BAKSO PAK SAM\") BUKAN \"Pengirim\".\n4) Normalisasi spasi terputus akibat OCR (contoh: \"Sanita ry\" → \"Sanitary\") tanpa mengubah makna.\n5) Jika semua kandidat ambigu, isi null (jangan menebak).\n\n\nJawab HANYA JSON valid.",
+              "role": "system"
+            },
+            {
+              "content": "=Konteks tambahan dari caption pengguna (opsional):\n{{ $('Telegram Trigger1').item.json.message.caption || '' }}"
+            },
+            {
+              "content": "=Teks dokumen yang perlu diekstrak:\n{{ $json.text }}"
+            },
+            {
+              "content": "Contoh input ringkas:\nNo. Pesanan: 579831846696617634\nNo. Resi: JX5482229389\nPengirim: Diamondo Sanitary\nPenerima:\nu**6\nNama Produk: AIGO Premium 16, Tanpa Engsel\nVariasi: 3pcs\nQty: 3\n\nKeluaran:\n{\n  \"extracted_data\": [\n    {\n      \"No. Pesanan\": \"579831846696617634\",\n      \"No. Resi\": \"JX5482229389\",\n      \"Pengirim\": \"Diamondo Sanitary\",\n      \"Penerima\": \"u**6\",\n      \"Nama Produk\": \"AIGO Premium 16, Tanpa Engsel\",\n      \"Variasi\": \"3pcs\",\n      \"Qty\": 3\n    },\n {\n      \"No. Pesanan\": \"250731J4CS3C1R\",\n      \"No. Resi\": \"11002312654708\",\n      \"Pengirim\": \"Diamondo Sanitary\",\n      \"Penerima\": \"Marsiyah\",\n      \"Nama Produk\": \"Selot Handle Pintu 20 Cm Kotak; Ukuran Tanggung Kunci Handel Pintu Tanggung Rumah Set Komplit 1 Set Warna Hitam Komplit Dengan E\",\n      \"Variasi\": \"PREMIUM SILVER, TANPA ENGSEL\",\n      \"Qty\": 1\n    },\n  ]\n}",
+              "role": "assistant"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1328,
+        176
+      ],
+      "id": "2c0ecf22-695c-4977-bcc9-ecf994e3050b",
+      "name": "Message a model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "AiuSr4u7a8jHR0uY",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "message.content.extracted_data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1616,
+        176
+      ],
+      "id": "86dd948a-3984-469f-b368-1788692eaa4e",
+      "name": "Split Out1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1VUtvx2dHC80J6aWxsyt1CXPdejjiyLxdaTaHjUdNrNY",
+          "mode": "list",
+          "cachedResultName": "invoice",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1VUtvx2dHC80J6aWxsyt1CXPdejjiyLxdaTaHjUdNrNY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1i1ZPwD-lkKh5ByZrA6UDRWVgqAKHN0q3oazNR0BpEXM/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "tanggal": "={{ $json.tanggal }}",
+            "waktu": "={{ $json.waktu }}",
+            "hari": "={{ $json.hari }}",
+            "No. Pesanan": "={{ $json['No. Pesanan'] }}",
+            "No. Resi": "={{ $json['No. Resi'] }}",
+            "Penerima": "={{ $json.Penerima }}",
+            "Pengirim": "={{ $json.Pengirim }}",
+            "Nama Produk": "={{ $json['Nama Produk'] }}",
+            "Variasi": "={{ $json.Variasi }}",
+            "Qty": "={{ $json.Qty }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "tanggal",
+              "displayName": "tanggal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "waktu",
+              "displayName": "waktu",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "hari",
+              "displayName": "hari",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "No. Resi",
+              "displayName": "No. Resi",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "No. Pesanan",
+              "displayName": "No. Pesanan",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Penerima",
+              "displayName": "Penerima",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Pengirim",
+              "displayName": "Pengirim",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Nama Produk",
+              "displayName": "Nama Produk",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Variasi",
+              "displayName": "Variasi",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Qty",
+              "displayName": "Qty",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2048,
+        176
+      ],
+      "id": "f0806ec8-9a60-40a3-a319-f4f8672073de",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cKkmxRh9dNwIjSTy",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram: Get File": {
+      "main": [
+        [
+          {
+            "node": "Extract from File1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Tanggal/Waktu/Hari": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger1": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Get File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File1": {
+      "main": [
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Split Out1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out1": {
+      "main": [
+        [
+          {
+            "node": "Add Tanggal/Waktu/Hari",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Send Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "a846e36c-02ff-4b0a-b5c0-a98722176efd",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "95712a4f2729a0601ba69457d3bfe6b3d1bfe29cde5a5609901dd1aa5cc106d4"
+  },
+  "id": "vIPljGJPDT5AYi9w",
+  "tags": []
+}
